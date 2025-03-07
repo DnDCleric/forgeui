@@ -9,6 +9,7 @@ interface ModalProps {
     confirmText?: string;
     cancelText?: string;
     confirmColor?: string;
+    children?: React.ReactNode
 }
 
 const Modal: React.FC<ModalProps> = ({

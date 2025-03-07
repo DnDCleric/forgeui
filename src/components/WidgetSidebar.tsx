@@ -1,5 +1,5 @@
-import React, { useRef } from "react";
-import { useUIStore } from "../store";
+import React from "react";
+import {UIElement, useUIStore} from "../store";
 import { v4 as uuidv4 } from "uuid";
 
 const WidgetSidebar: React.FC = () => {

@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect } from "react";
 import { useUIStore } from "../store";
 
 const ElementProperties: React.FC = () => {
-    const selectedElementId = useUIStore((state) => state.selectedElementId);
+    const selectedElementId = useUIStore((state) => state.selectedElementId ?? "");
     const elements = useUIStore((state) => state.elements);
     const updateElement = useUIStore((state) => state.updateElement);
     const validateName = useUIStore((state) => state.validateName);
@@ -20,7 +20,7 @@ const ElementProperties: React.FC = () => {
             setTempHeight(String(selectedElement.height));
             setTempName(selectedElement.name || "");
         }
-    }, [selectedElement?.width, selectedElement?.height, selectedElement?.name]);
+    }, [selectedElement]);
 
     if (!selectedElement) return <div className="p-4 text-gray-400">No element selected</div>;
 
@@ -87,22 +87,22 @@ const ElementProperties: React.FC = () => {
 
     // ✅ Handle Removing Image
     const handleRemoveImage = () => {
-        updateElement(selectedElementId, { imageSrc: null });
+        updateElement(selectedElementId, { imageSrc: "" });
         if (fileInputRef.current) {
             fileInputRef.current.value = "";
         }
     };
 
     // ✅ Scale Slider: Adjusts Width & Height Proportionally
-    const handleScaleChange = (scaleFactor: number) => {
-        const newWidth = Math.floor(Math.max(5, Math.min(1500, selectedElement.width * (scaleFactor / 100))));
-        const newHeight = Math.floor(Math.max(5, Math.min(1500, selectedElement.height * (scaleFactor / 100))));
-
-        updateElement(selectedElementId, {
-            width: newWidth,
-            height: newHeight,
-        });
-    };
+    // const handleScaleChange = (scaleFactor: number) => {
+    //     const newWidth = Math.floor(Math.max(5, Math.min(1500, selectedElement.width * (scaleFactor / 100))));
+    //     const newHeight = Math.floor(Math.max(5, Math.min(1500, selectedElement.height * (scaleFactor / 100))));
+    //
+    //     updateElement(selectedElementId, {
+    //         width: newWidth,
+    //         height: newHeight,
+    //     });
+    // };
 
     return (
         <div className="bg-gray-900 p-4 border border-gray-700 rounded-md mt-4">

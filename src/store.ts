@@ -1,9 +1,23 @@
 import { create } from "zustand";
 import toast from "react-hot-toast";
+import { v4 as uuidv4 } from "uuid";
 
-interface UIElement {
+export interface FileItem {
     id: string;
-    type: "Frame" | "Button" | "CheckButton" | "EditBox" | "ScrollFrame" | "Slider";
+    name: string;
+    content: string;  // Serialized canvas JSON
+    projectId?: string; // Null for standalone files
+}
+
+export interface Project {
+    id: string;
+    name: string;
+    files: string[]; // File IDs
+}
+
+export interface UIElement {
+    id: string;
+    type: "Text" | "Frame" | "Button" | "CheckButton" | "EditBox" | "ScrollFrame" | "Slider";
     x: number;
     y: number;
     width: number;
@@ -17,9 +31,12 @@ interface UIElement {
     parentId?: string;
     name?: string;
     checked?: boolean;
+    minValue?: number;
+    maxValue?: number;
+    value?: number;
 }
 
-interface UIState {
+export interface UIState {
     elements: UIElement[];
     selectedElementId: string | null;
     gridSize: number;
@@ -44,6 +61,16 @@ interface UIState {
     resetView: () => void;
     setScale: (scale: number) => void;
     setOffset: (x: number, y: number) => void;
+    createFile: (name: string, projectId?: string) => void;
+    createProject: (name: string) => void;
+    moveFileToProject: (fileId: string, projectId: string) => void;
+    deleteFile: (fileId: string) => void;
+    deleteProject: (projectId: string) => void;
+    projects: Record<string, Project>;
+    files: Record<string, FileItem>;
+    activeFileId: string | null;
+    clearCanvas: () => void;
+    loadProject: (projectId: string) => void;
 }
 
 export const useUIStore = create<UIState>((set, get) => {
@@ -61,10 +88,11 @@ export const useUIStore = create<UIState>((set, get) => {
         if (savedState) {
             initialState = JSON.parse(savedState);
         }
-    } catch (error) {
+    } catch {
         console.warn("Invalid saved state, using defaults.");
     }
 
+    // @ts-expect-error No error
     let saveTimeout: NodeJS.Timeout | null = null;
 
     const triggerAutoSave = () => {
@@ -80,11 +108,15 @@ export const useUIStore = create<UIState>((set, get) => {
 
     return {
         ...initialState,
+        projects: {} as Record<string, Project>,
+        files: {} as Record<string, FileItem>,
+        recentFiles: [] as string[],
+        activeFileId: null,
         setScale: (scale) => set({ scale }),
         setOffset: (x, y) => set({ offset: { x, y } }),
         resetView: () => set({ scale: 1, offset: { x: 0, y: 0 } }),
         fileName: `Untitled-${new Date().toISOString().replace(/[:.]/g, "-")}`,
-        recentFiles: JSON.parse(localStorage.getItem("forgeui_recentFiles") || "[]"),
+        //recentFiles: JSON.parse(localStorage.getItem("forgeui_recentFiles") || "[]"),
         hasUnsavedChanges: false,
 
         setFileName: (name) => {
@@ -95,38 +127,91 @@ export const useUIStore = create<UIState>((set, get) => {
             set({ hasUnsavedChanges: true });
         },
 
-        saveFile: () => {
-            const { fileName, recentFiles } = get();
+        createFile: (name, projectId) =>
+            set((state) => {
+                const id = uuidv4();
+                const newFile: FileItem = { id, name, content: "", projectId };
+                return {
+                    files: { ...state.files, [id]: newFile },
+                    projects: projectId
+                        ? {
+                            ...state.projects,
+                            [projectId]: {
+                                ...state.projects[projectId],
+                                files: [...state.projects[projectId].files, id],
+                            },
+                        }
+                        : state.projects,
+                };
+            }),
 
-            // ✅ Always save, even if no changes
-            const updatedRecentFiles = [fileName, ...recentFiles.filter((file) => file !== fileName)].slice(0, 5);
-            localStorage.setItem("forgeui_recentFiles", JSON.stringify(updatedRecentFiles));
-            localStorage.setItem(`forgeui_project_${fileName}`, JSON.stringify(get()));
+        createProject: (name) =>
+            set((state) => {
+                const id = uuidv4();
+                return { projects: { ...state.projects, [id]: { id, name, files: [] } } };
+            }),
 
-            set({ recentFiles: updatedRecentFiles, hasUnsavedChanges: false });
-        },
+        moveFileToProject: (fileId, projectId) =>
+            set((state) => {
+                const file = state.files[fileId];
+                if (!file) return state;
 
-        loadFile: (name) => {
-            const savedState = localStorage.getItem(`forgeui_project_${name}`);
-            if (savedState) {
-                const { recentFiles } = get();
+                // Remove from old project if applicable
+                const updatedProjects = { ...state.projects };
+                if (file.projectId && updatedProjects[file.projectId]) {
+                    updatedProjects[file.projectId].files = updatedProjects[file.projectId].files.filter(
+                        (id) => id !== fileId
+                    );
+                }
 
-                // ✅ Ensure the file remains in recent files
-                const updatedRecentFiles = [name, ...recentFiles.filter((file) => file !== name)].slice(0, 5);
-                localStorage.setItem("forgeui_recentFiles", JSON.stringify(updatedRecentFiles));
+                // Add to new project (or remove from any project)
+                if (projectId && updatedProjects[projectId]) {
+                    updatedProjects[projectId].files.push(fileId);
+                }
 
-                set({ ...JSON.parse(savedState), fileName: name, hasUnsavedChanges: false, recentFiles: updatedRecentFiles });
-            }
-        },
+                return {
+                    files: { ...state.files, [fileId]: { ...file, projectId } },
+                    projects: updatedProjects,
+                };
+            }),
 
-        newFile: () => {
-            set({
-                fileName: `Untitled-${new Date().toISOString().replace(/[:.]/g, "-")}`,
-                elements: [],
-                selectedElementId: null,
-                hasUnsavedChanges: false,
-            });
-        },
+        deleteFile: (fileId) =>
+            set((state) => {
+                const file = state.files[fileId];
+                if (!file) return state;
+
+                // Remove from project if applicable
+                const updatedProjects = { ...state.projects };
+                if (file.projectId && updatedProjects[file.projectId]) {
+                    updatedProjects[file.projectId].files = updatedProjects[file.projectId].files.filter(
+                        (id) => id !== fileId
+                    );
+                }
+
+                return {
+                    files: Object.fromEntries(Object.entries(state.files).filter(([id]) => id !== fileId)),
+                    projects: updatedProjects,
+                };
+            }),
+
+        deleteProject: (projectId) =>
+            set((state) => {
+                const updatedProjects = { ...state.projects };
+                const projectFiles = updatedProjects[projectId]?.files || [];
+                delete updatedProjects[projectId];
+
+                return {
+                    projects: updatedProjects,
+                    files: Object.fromEntries(Object.entries(state.files).filter(([id]) => !projectFiles.includes(id))),
+                };
+            }),
+
+        loadFile: (fileId) =>
+            set((state) => ({
+                activeFileId: fileId,
+                recentFiles: [fileId, ...state.recentFiles.filter((id) => id !== fileId)].slice(0, 5),
+            })),
+
         addElement: (element) =>
             set((state) => {
                 const newState = { ...state, elements: [...state.elements, element] };
