@@ -1,127 +1,129 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef } from "react";
 import { useUIStore } from "../store";
-import Modal from "./Modal";
-import ToolsPanel from "./ToolsPanel.tsx";
+import ToolsPanel from "./ToolsPanel";
+import { ProjectExplorerRef } from "./ProjectExplorer";
 
-const Toolbar: React.FC = () => {
-    const loadFile = useUIStore((state) => state.loadFile);
-    const clearCanvas = useUIStore((state) => state.clearCanvas);
-    const fileName = useUIStore((state) => state.fileName);
-    const setFileName = useUIStore((state) => state.setFileName);
-    const recentFiles = useUIStore((state) => state.recentFiles);
+interface ToolbarProps {
+    projectExplorerRef: React.RefObject<ProjectExplorerRef | null>;
+}
+
+const Toolbar: React.FC<ToolbarProps> = ({ projectExplorerRef }) => {
+    const {
+        projects,
+        files,
+        loadFile,
+        activeProjectId,
+        activeFileId,
+        saveCurrentFile,
+        recentFiles,
+    } = useUIStore();
 
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-    const [showConfirm, setShowConfirm] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
-    useEffect(() => {
+    // Close dropdown when clicking outside
+    React.useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
                 setIsDropdownOpen(false);
             }
         };
         document.addEventListener("mousedown", handleClickOutside);
-        return () => {
-            document.removeEventListener("mousedown", handleClickOutside);
-        };
+        return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
+    const handleLoadRecentFile = (fileId: string) => {
+        saveCurrentFile(); // Save current file before switching
+        loadFile(fileId);
+        setIsDropdownOpen(false);
+    };
+
     return (
-        <>
-            {/* Fixed Top Navbar */}
-                <div className="fixed top-0 left-0 w-full bg-gray-900 text-white flex items-center justify-between px-4 py-2 border-b border-gray-700 z-200">
-                    <div className="flex items-center gap-4">
-                        {/* File Dropdown */}
-                        <div className="w-100">
-                            <div className="relative" ref={dropdownRef}>
+        <div className="fixed top-0 left-0 w-full bg-gray-900 text-white flex items-center justify-between px-4 py-2 border-b border-gray-700 z-50">
+            {/* File Dropdown */}
+            <div className="relative" ref={dropdownRef}>
+                <button
+                    onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                    className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-md flex items-center gap-2"
+                >
+                    <span>File</span>
+                    <span className="text-xs">▼</span>
+                </button>
+
+                {isDropdownOpen && (
+                    <div className="absolute left-0 mt-2 w-64 bg-gray-900 border border-gray-700 rounded-md shadow-lg py-2">
+                        {/* New Project */}
+                        <button
+                            onClick={() => {
+                                projectExplorerRef.current?.showNewProject();
+                                setIsDropdownOpen(false);
+                            }}
+                            className="w-full text-left px-4 py-2 hover:bg-gray-700 flex items-center gap-2"
+                        >
+                            <span className="text-green-500">🆕</span>
+                            New Project
+                        </button>
+
+                        {/* Load Project */}
+                        <button
+                            onClick={() => {
+                                projectExplorerRef.current?.showLoadProject();
+                                setIsDropdownOpen(false);
+                            }}
+                            className="w-full text-left px-4 py-2 hover:bg-gray-700 flex items-center gap-2"
+                        >
+                            <span className="text-blue-500">📂</span>
+                            Load Project
+                        </button>
+
+                        {/* Separator */}
+                        <hr className="my-2 border-gray-700" />
+
+                        {/* Recent Files */}
+                        <div className="px-4 py-1 text-sm text-gray-500">Recent Files</div>
+                        {recentFiles.map((fileId) => {
+                            const file = files[fileId];
+                            if (!file) return null;
+                            const project = file.projectId ? projects[file.projectId] : null;
+
+                            return (
                                 <button
-                                    onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                                    className="px-4 py-2bg-gray-800 hover:bg-gray-700 rounded-md"
+                                    key={fileId}
+                                    onClick={() => handleLoadRecentFile(fileId)}
+                                    className="w-full text-left px-4 py-2 hover:bg-gray-700 flex items-center gap-2"
                                 >
-                                    File ▼
-                                </button>
-
-                                {isDropdownOpen && (
-                                    <div className="absolute left-0 mt-2 w-48 bg-gray-900 border border-gray-700 rounded-md shadow-lg">
-                                        <button
-                                            onClick={() => {
-                                                //newFile();
-                                                setIsDropdownOpen(false);
-                                            }}
-                                            className="block w-full text-left px-4 py-2 hover:bg-gray-700"
-                                        >
-                                            🆕 New Project
-                                        </button>
-
-                                        {/* Separator */}
-                                        <hr className="border-gray-700 my-1" />
-
-                                        {/* Recent Files Section */}
-                                        {recentFiles.length > 0 && (
-                                            <>
-                                                <span className="px-4 py-2 text-gray-400 text-xs block">Recent Files</span>
-                                                {recentFiles.map((file) => (
-                                                    <button
-                                                        key={file}
-                                                        onClick={() => {
-                                                            loadFile(file);
-                                                            setIsDropdownOpen(false);
-                                                        }}
-                                                        className="block w-full text-left px-4 py-2 hover:bg-gray-700"
-                                                    >
-                                                        📁 {file}
-                                                    </button>
-                                                ))}
-                                            </>
+                                    <span className="text-yellow-500">📄</span>
+                                    <div className="flex flex-col">
+                                        <span className="text-sm">{file.name}</span>
+                                        {project && (
+                                            <span className="text-xs text-gray-500">
+                                                in {project.name}
+                                            </span>
                                         )}
-
-                                        {/* Separator */}
-                                        <hr className="border-gray-700 my-1" />
-
-                                        <button
-                                            onClick={() => {
-                                                setShowConfirm(true);
-                                                setIsDropdownOpen(false);
-                                            }}
-                                            className="block w-full text-left px-4 py-2 hover:bg-red-700 text-red-400"
-                                        >
-                                            ❌ Clear Canvas
-                                        </button>
                                     </div>
-                                )}
-                            </div>
-                        </div>
-
-
-                        <input
-                            type="text"
-                            className="px-3 py-2 mr-4 bg-gray-800 text-white border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 w-150"
-                            value={fileName}
-                            onChange={(e) => setFileName(e.target.value)}
-                        />
-                        <ToolsPanel />
-
+                                </button>
+                            );
+                        })}
                     </div>
-
-                    {/* Centered App Name */}
-                    <h1 className="text-lg font-bold text-gray-300">ForgeUI</h1>
-                </div>
-
-            {/* Confirmation Modal for Clearing Canvas */}
-                {showConfirm && (
-                    <Modal
-                        title="Confirm Clear Canvas"
-                        message="Are you sure you want to clear everything?"
-                        onClose={() => setShowConfirm(false)}
-                        onConfirm={() => {
-                            clearCanvas();
-                            setShowConfirm(false);
-                        }}
-                        confirmText="Clear"
-                        confirmColor="bg-red-600 hover:bg-red-700"
-                    />
                 )}
-        </>
+            </div>
+
+            {/* Project/File Info */}
+            <div className="flex items-center gap-2 text-sm text-gray-400">
+                {activeProjectId && projects[activeProjectId] && (
+                    <>
+                        <span>{projects[activeProjectId].name}</span>
+                        <span>/</span>
+                    </>
+                )}
+                {activeFileId && files[activeFileId] && (
+                    <span>{files[activeFileId].name}</span>
+                )}
+            </div>
+
+            {/* Tools Panel */}
+            <ToolsPanel />
+        </div>
     );
 };
 

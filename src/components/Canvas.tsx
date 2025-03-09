@@ -109,6 +109,26 @@ const Canvas: React.FC = () => {
                             x={el.x}
                             y={el.y}
                             onClick={() => setSelectedElement(el.id)}
+                            onDragMove={(e) => {
+                                if (snapToGrid) {
+                                    const pos = e.target.position();
+                                    const snappedX = Math.round(pos.x / gridSize) * gridSize;
+                                    const snappedY = Math.round(pos.y / gridSize) * gridSize;
+                                    e.target.position({ x: snappedX, y: snappedY });
+                                }
+                            }}
+                            onDragEnd={(e) => {
+                                const pos = e.target.position();
+                                if (snapToGrid) {
+                                    // Snap to nearest grid point
+                                    const snappedX = Math.round(pos.x / gridSize) * gridSize;
+                                    const snappedY = Math.round(pos.y / gridSize) * gridSize;
+                                    updateElement(el.id, { x: snappedX, y: snappedY });
+                                    e.target.position({ x: snappedX, y: snappedY });
+                                } else {
+                                    updateElement(el.id, { x: pos.x, y: pos.y });
+                                }
+                            }}
                         >
                             <Rect
                                 width={el.width}
