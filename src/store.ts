@@ -446,24 +446,30 @@ export const useUIStore = create<UIState>((set, get) => {
                     const parent = state.elements.find(el => el.id === element.parentId);
                     if (!parent) return state;
 
-                    const newX = updates.x !== undefined ? updates.x - parent.x : element.x;
-                    const newY = updates.y !== undefined ? updates.y - parent.y : element.y;
-                    const newWidth = updates.width || element.width;
-                    const newHeight = updates.height || element.height;
-
-                    // Ensure element stays within parent bounds
-                    updates.x = Math.max(parent.x, Math.min(parent.x + parent.width - newWidth, parent.x + newX));
-                    updates.y = Math.max(parent.y, Math.min(parent.y + parent.height - newHeight, parent.y + newY));
+                    const updatedElement = { ...element, ...updates };
                     
-                    // Ensure size doesn't exceed parent bounds
+                    // Calculate relative position to parent
+                    const relativeX = (updates.x !== undefined ? updates.x : element.x) - parent.x;
+                    const relativeY = (updates.y !== undefined ? updates.y : element.y) - parent.y;
+                    
+                    // Constrain position within parent bounds
+                    const constrainedX = Math.max(0, Math.min(relativeX, parent.width - updatedElement.width));
+                    const constrainedY = Math.max(0, Math.min(relativeY, parent.height - updatedElement.height));
+                    
+                    // Convert back to absolute coordinates
+                    updates.x = parent.x + constrainedX;
+                    updates.y = parent.y + constrainedY;
+
+                    // Constrain size to parent bounds
                     if (updates.width !== undefined) {
-                        updates.width = Math.min(updates.width, parent.width);
+                        updates.width = Math.min(updates.width, parent.width - constrainedX);
                     }
                     if (updates.height !== undefined) {
-                        updates.height = Math.min(updates.height, parent.height);
+                        updates.height = Math.min(updates.height, parent.height - constrainedY);
                     }
                 }
 
+                // Update the element with the constrained values
                 return {
                     elements: state.elements.map((el) =>
                         el.id === id ? { ...el, ...updates } : el

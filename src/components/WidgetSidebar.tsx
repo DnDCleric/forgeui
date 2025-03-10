@@ -2,16 +2,34 @@ import React, { forwardRef, ForwardRefRenderFunction } from "react";
 import { UIElement, useUIStore } from "../store";
 import { v4 as uuidv4 } from "uuid";
 import { FaEdit } from "react-icons/fa";
+import { toast } from "react-hot-toast";
 
 const WidgetSidebar: React.FC = () => {
     const addElement = useUIStore((state) => state.addElement);
 
     const handleAddElement = (type: UIElement["type"]) => {
+        const { elements, selectedElementIds } = useUIStore.getState();
+        
+        // Find selected container (Frame or Section)
+        let parentId: string | undefined;
+        if (selectedElementIds.length === 1) {
+            const selectedElement = elements.find(el => el.id === selectedElementIds[0]);
+            if (selectedElement?.isContainer) {
+                parentId = selectedElement.id;
+            }
+        }
+
+        // Only allow non-container elements to be created if there's a selected container
+        if (!parentId && type !== "Frame" && type !== "Section") {
+            toast.error("Please select a Frame or Section first");
+            return;
+        }
+
         const newElement = {
             id: uuidv4(),
             type,
-            x: 50,
-            y: 50,
+            x: parentId ? 0 : 50, // If has parent, position relative to parent
+            y: parentId ? 0 : 50,
             width: type === "Button" ? 120 : 200,
             height: type === "Button" ? 40 : 150,
             color: "rgba(0, 0, 255, 0.5)",
@@ -22,6 +40,8 @@ const WidgetSidebar: React.FC = () => {
             minValue: type === "Slider" ? 0 : undefined,
             maxValue: type === "Slider" ? 100 : undefined,
             value: type === "Slider" ? 50 : undefined,
+            parentId,
+            childIds: [],
         };
 
         addElement(newElement);

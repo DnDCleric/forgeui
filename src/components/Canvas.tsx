@@ -2,6 +2,8 @@ import React, { useRef, useEffect, useState } from "react";
 import { Stage, Layer, Rect, Line, Group, Image as KonvaImage, Text } from "react-konva";
 import { useUIStore } from "../store";
 import ContextMenu from "./ContextMenu";
+import { KonvaEventObject } from "konva/lib/Node";
+import { DragEndEvent } from "@dnd-kit/core";
 
 interface SelectionBox {
     startX: number;
@@ -90,61 +92,184 @@ const Canvas: React.FC = () => {
     };
 
     const handleDragMove = (e: any, elementId: string) => {
-        const pos = e.target.position();
-        if (snapToGrid) {
-            const snappedX = Math.round(pos.x / gridSize) * gridSize;
-            const snappedY = Math.round(pos.y / gridSize) * gridSize;
-            e.target.position({ x: snappedX, y: snappedY });
+        const element = elements.find(el => el.id === elementId);
+        if (!element) return;
+
+        // Check if this element is a parent of any selected elements
+        const hasSelectedChildren = selectedElementIds.some(id => {
+            const el = elements.find(e => e.id === id);
+            return el?.parentId === elementId;
+        });
+
+        // If this is a parent with selected children, prevent moving it
+        if (hasSelectedChildren) {
+            e.target.position({ x: element.x, y: element.y });
+            return;
         }
 
-        // Move all selected elements together
-        if (selectedElementIds.includes(elementId)) {
-            const element = elements.find(el => el.id === elementId);
-            if (!element) return;
+        const pos = e.target.position();
+        let newX = pos.x;
+        let newY = pos.y;
 
-            const dx = pos.x - element.x;
-            const dy = pos.y - element.y;
+        // If element has a parent, constrain its movement within parent bounds
+        if (element.parentId) {
+            const parent = elements.find(el => el.id === element.parentId);
+            if (parent) {
+                // Calculate bounds relative to parent
+                const minX = parent.x;
+                const maxX = parent.x + parent.width - element.width;
+                const minY = parent.y;
+                const maxY = parent.y + parent.height - element.height;
+
+                // Constrain position
+                newX = Math.max(minX, Math.min(maxX, pos.x));
+                newY = Math.max(minY, Math.min(maxY, pos.y));
+
+                // Update position if it's different
+                if (newX !== pos.x || newY !== pos.y) {
+                    e.target.position({ x: newX, y: newY });
+                }
+            }
+        }
+
+        // Apply grid snapping if enabled
+        if (snapToGrid) {
+            newX = Math.round(newX / gridSize) * gridSize;
+            newY = Math.round(newY / gridSize) * gridSize;
+            e.target.position({ x: newX, y: newY });
+        }
+
+        // Move all selected elements together (except parents of selected elements)
+        if (selectedElementIds.includes(elementId)) {
+            const dx = newX - element.x;
+            const dy = newY - element.y;
 
             selectedElementIds.forEach(id => {
                 if (id !== elementId) {
                     const el = elements.find(e => e.id === id);
                     if (!el) return;
 
+                    // Skip if this element is a parent of any selected elements
+                    const hasSelectedChildren = selectedElementIds.some(selectedId => {
+                        const selectedEl = elements.find(e => e.id === selectedId);
+                        return selectedEl?.parentId === id;
+                    });
+                    if (hasSelectedChildren) return;
+
                     const group = e.target.getStage().findOne(`#group-${id}`);
                     if (group) {
-                        const newX = snapToGrid ? Math.round((el.x + dx) / gridSize) * gridSize : el.x + dx;
-                        const newY = snapToGrid ? Math.round((el.y + dy) / gridSize) * gridSize : el.y + dy;
-                        group.position({ x: newX, y: newY });
+                        let moveX = el.x + dx;
+                        let moveY = el.y + dy;
+
+                        // If element has a parent, constrain its movement
+                        if (el.parentId) {
+                            const parent = elements.find(p => p.id === el.parentId);
+                            if (parent) {
+                                moveX = Math.max(parent.x, Math.min(parent.x + parent.width - el.width, moveX));
+                                moveY = Math.max(parent.y, Math.min(parent.y + parent.height - el.height, moveY));
+                            }
+                        }
+
+                        // Apply grid snapping if enabled
+                        if (snapToGrid) {
+                            moveX = Math.round(moveX / gridSize) * gridSize;
+                            moveY = Math.round(moveY / gridSize) * gridSize;
+                        }
+
+                        group.position({ x: moveX, y: moveY });
                     }
                 }
             });
         }
     };
 
-    const handleDragEnd = (e: any, elementId: string) => {
+    const handleDragEnd = (e: KonvaEventObject<DragEvent>) => {
+        const id = e.target.id().replace('group-', '');
+        const element = elements.find(el => el.id === id);
+        if (!element) return;
+
         const pos = e.target.position();
-        const snappedX = snapToGrid ? Math.round(pos.x / gridSize) * gridSize : pos.x;
-        const snappedY = snapToGrid ? Math.round(pos.y / gridSize) * gridSize : pos.y;
+        const delta = {
+            x: pos.x - element.x,
+            y: pos.y - element.y
+        };
 
-        // Update all selected elements
-        if (selectedElementIds.includes(elementId)) {
-            const element = elements.find(el => el.id === elementId);
-            if (!element) return;
+        // Find if element is being dropped into a container
+        const containers = elements.filter(el => el.isContainer && el.id !== id);
+        const dropPoint = { 
+            x: element.x + delta.x, 
+            y: element.y + delta.y 
+        };
 
-            const dx = snappedX - element.x;
-            const dy = snappedY - element.y;
+        // Find potential new parent
+        let newParentId = undefined;
+        for (const container of containers) {
+            if (
+                dropPoint.x >= container.x &&
+                dropPoint.x <= container.x + container.width &&
+                dropPoint.y >= container.y &&
+                dropPoint.y <= container.y + container.height
+            ) {
+                newParentId = container.id;
+                break;
+            }
+        }
 
-            selectedElementIds.forEach(id => {
-                const el = elements.find(e => e.id === id);
-                if (!el) return;
+        // If element already has a parent and is not being dropped into a new container,
+        // ensure it stays within its current parent's bounds
+        if (element.parentId && !newParentId) {
+            const parent = elements.find(el => el.id === element.parentId);
+            if (parent) {
+                const newX = Math.max(parent.x, Math.min(parent.x + parent.width - element.width, pos.x));
+                const newY = Math.max(parent.y, Math.min(parent.y + parent.height - element.height, pos.y));
+                updateElement(id, { x: newX, y: newY });
+                return;
+            }
+        }
 
+        // If dropping into a new container, convert position to be relative to container
+        if (newParentId) {
+            const newParent = elements.find(el => el.id === newParentId);
+            if (newParent) {
+                const relativeX = dropPoint.x - newParent.x;
+                const relativeY = dropPoint.y - newParent.y;
+                
+                // Ensure element stays within container bounds
+                const constrainedX = Math.max(0, Math.min(newParent.width - element.width, relativeX));
+                const constrainedY = Math.max(0, Math.min(newParent.height - element.height, relativeY));
+                
+                // Update element with new parent and position
                 updateElement(id, {
-                    x: snapToGrid ? Math.round((el.x + dx) / gridSize) * gridSize : el.x + dx,
-                    y: snapToGrid ? Math.round((el.y + dy) / gridSize) * gridSize : el.y + dy
+                    x: constrainedX + newParent.x,
+                    y: constrainedY + newParent.y,
+                    parentId: newParentId
                 });
+
+                // Update old parent's childIds
+                if (element.parentId) {
+                    const oldParent = elements.find(el => el.id === element.parentId);
+                    if (oldParent) {
+                        updateElement(oldParent.id, {
+                            childIds: oldParent.childIds.filter(childId => childId !== id)
+                        });
+                    }
+                }
+
+                // Update new parent's childIds
+                updateElement(newParentId, {
+                    childIds: [...newParent.childIds, id]
+                });
+                return;
+            }
+        }
+
+        // If not dropping into a container and element doesn't have a parent,
+        // just update position normally
+        if (!element.parentId) {
+            updateElement(id, {
+                x: pos.x,
+                y: pos.y
             });
-        } else {
-            updateElement(elementId, { x: snappedX, y: snappedY });
         }
     };
 
@@ -271,7 +396,7 @@ const Canvas: React.FC = () => {
                             y={el.y}
                             onClick={(e) => handleElementClick(e, el.id)}
                             onDragMove={(e) => handleDragMove(e, el.id)}
-                            onDragEnd={(e) => handleDragEnd(e, el.id)}
+                            onDragEnd={(e) => handleDragEnd(e)}
                         >
                             <Rect
                                 width={el.width}
