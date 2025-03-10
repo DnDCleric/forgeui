@@ -70,8 +70,8 @@ ${elementName}:SetPoint("CENTER", UIParent, "CENTER", ${el.x}, ${el.y})
     };
 
     return (
-        <div className="bg-gray-900 text-white p-4 border-l border-gray-700 w-80 flex flex-col">
-            <h2 className="text-lg font-bold mb-4">Generated Lua Code</h2>
+        <div className="bg-gray-900 text-white p-4 border-l border-gray-700 h-full flex flex-col">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-400 mb-4">Generated Lua Code</h2>
             <AddonNameInput />
             <textarea
                 className="w-full flex-1 bg-gray-800 text-green-400 p-2 rounded-md font-mono resize-none"

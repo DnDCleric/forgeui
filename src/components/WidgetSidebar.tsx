@@ -1,10 +1,10 @@
-import React from "react";
-import {UIElement, useUIStore} from "../store";
+import React, { forwardRef, ForwardRefRenderFunction } from "react";
+import { UIElement, useUIStore } from "../store";
 import { v4 as uuidv4 } from "uuid";
+import { FaEdit } from "react-icons/fa";
 
 const WidgetSidebar: React.FC = () => {
     const addElement = useUIStore((state) => state.addElement);
-
 
     const handleAddElement = (type: UIElement["type"]) => {
         const newElement = {
@@ -19,7 +19,6 @@ const WidgetSidebar: React.FC = () => {
             borderWidth: 1,
             imageSrc: "",
             text: type === "Button" ? "Click Me" : type === "EditBox" ? "Enter text..." : undefined,
-            checked: type === "CheckButton" ? false : undefined,
             minValue: type === "Slider" ? 0 : undefined,
             maxValue: type === "Slider" ? 100 : undefined,
             value: type === "Slider" ? 50 : undefined,
@@ -29,29 +28,29 @@ const WidgetSidebar: React.FC = () => {
     };
 
     return (
-        <div className="bg-gray-900 p-4 border border-gray-700 rounded-md mt-4">
-            <h3 className="text-lg font-bold">Widgets</h3>
+        <div className="bg-gray-900 p-4 border border-gray-700 rounded-md">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-400">Widgets</h3>
 
             <div className="grid gap-2 mt-2">
-                <button className="bg-gray-700" onClick={() => handleAddElement("Frame")}>
+                <button className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded" onClick={() => handleAddElement("Frame")}>
                     ➕ Add Frame
                 </button>
-                <button className="bg-gray-700" onClick={() => handleAddElement("Button")}>
+                <button className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded" onClick={() => handleAddElement("Button")}>
                     ➕ Add Button
                 </button>
-                <button className="bg-gray-700" onClick={() => handleAddElement("Text")}>
+                <button className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded" onClick={() => handleAddElement("Text")}>
                     ➕ Add Text
                 </button>
-                <button className="bg-gray-700" onClick={() => handleAddElement("CheckButton")}>
+                <button className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded" onClick={() => handleAddElement("CheckButton")}>
                     ✅ CheckButton
                 </button>
-                <button className="bg-gray-700" onClick={() => handleAddElement("EditBox")}>
-                    ✏️ EditBox
+                <button className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded" onClick={() => handleAddElement("EditBox")}>
+                    <FaEdit className="mr-2" /> EditBox
                 </button>
-                <button className="bg-gray-700" onClick={() => handleAddElement("ScrollFrame")}>
+                <button className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded" onClick={() => handleAddElement("ScrollFrame")}>
                     📜 ScrollFrame
                 </button>
-                <button className="bg-gray-700" onClick={() => handleAddElement("Slider")}>
+                <button className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded" onClick={() => handleAddElement("Slider")}>
                     🎚 Slider
                 </button>
             </div>

@@ -6,7 +6,7 @@ const GridSettings: React.FC = () => {
 
     return (
         <div className="bg-gray-900 p-4 border border-gray-700 rounded-md mt-4">
-            <h3 className="text-lg font-bold">Grid Settings</h3>
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-400">Grid Settings</h3>
 
             {/* Snap to Grid Toggle */}
             <label className="flex items-center gap-2 mt-2">

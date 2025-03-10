@@ -21,7 +21,7 @@ export interface Project {
 
 export interface UIElement {
     id: string;
-    type: "Text" | "Frame" | "Button" | "CheckButton" | "EditBox" | "ScrollFrame" | "Slider";
+    type: "Text" | "Frame" | "Button" | "CheckButton" | "EditBox" | "ScrollFrame" | "Slider" | "Section";
     x: number;
     y: number;
     width: number;
@@ -33,16 +33,18 @@ export interface UIElement {
     opacity?: number;
     imageSrc?: string;
     parentId?: string;
+    childIds: string[];  // Array of child element IDs
     name?: string;
     checked?: boolean;
     minValue?: number;
     maxValue?: number;
     value?: number;
+    isContainer?: boolean; // Indicates if this element can contain other elements (Frame, Section)
 }
 
 export interface UIState {
     elements: UIElement[];
-    selectedElementId: string | null;
+    selectedElementIds: string[];
     gridSize: number;
     snapToGrid: boolean;
     projects: Record<string, Project>;
@@ -51,6 +53,10 @@ export interface UIState {
     activeFileId: string | null;
     recentFiles: string[];  // Array of file IDs, most recent first
     hasUnsavedChanges: boolean;
+
+    // Grid Settings
+    setGridSize: (size: number) => void;
+    toggleSnapToGrid: () => void;
 
     // Project Management
     createProject: (name: string) => string; // Returns project ID
@@ -72,8 +78,11 @@ export interface UIState {
     addElement: (element: UIElement) => void;
     updateElement: (id: string, updates: Partial<UIElement>) => void;
     deleteElement: (id: string) => void;
-    setSelectedElement: (id: string | null) => void;
+    setSelectedElements: (ids: string[]) => void;
+    toggleElementSelection: (id: string) => void;
+    clearSelection: () => void;
     clearCanvas: () => void;
+    alignElements: (alignment: "left" | "center" | "right" | "top" | "bottom" | "vertical") => void;
 
     // View Management
     scale: number;
@@ -99,7 +108,7 @@ export const useUIStore = create<UIState>((set, get) => {
         }
         return {
             elements: [],
-            selectedElementId: null,
+            selectedElementIds: [],
             gridSize: 20,
             snapToGrid: true,
             scale: 1,
@@ -378,33 +387,149 @@ export const useUIStore = create<UIState>((set, get) => {
             saveState();
         },
 
-        addElement: (element) =>
-            set((state) => ({
-                elements: [...state.elements, element],
-                hasUnsavedChanges: true,
-            })),
+        addElement: (element) => {
+            // Only allow Frame/Section to be created without a parent
+            if (!element.parentId && element.type !== "Frame" && element.type !== "Section") {
+                toast.error("Elements must be placed inside a Frame or Section");
+                return;
+            }
+
+            const newElement = {
+                ...element,
+                color: element.color || "#0000ff80",
+                childIds: [],
+                isContainer: element.type === "Frame" || element.type === "Section"
+            };
+
+            set((state) => {
+                // If this element has a parent, validate position within parent bounds
+                if (newElement.parentId) {
+                    const parent = state.elements.find(el => el.id === newElement.parentId);
+                    if (!parent) {
+                        toast.error("Parent container not found");
+                        return state;
+                    }
+
+                    // Convert absolute coordinates to relative coordinates
+                    newElement.x = Math.max(0, Math.min(newElement.x - parent.x, parent.width - newElement.width));
+                    newElement.y = Math.max(0, Math.min(newElement.y - parent.y, parent.height - newElement.height));
+                }
+
+                const updatedElements = [...state.elements, newElement];
+
+                // Update parent's childIds
+                if (newElement.parentId) {
+                    const parentIndex = updatedElements.findIndex(el => el.id === newElement.parentId);
+                    if (parentIndex !== -1) {
+                        updatedElements[parentIndex] = {
+                            ...updatedElements[parentIndex],
+                            childIds: [...updatedElements[parentIndex].childIds, newElement.id]
+                        };
+                    }
+                }
+
+                return {
+                    elements: updatedElements,
+                    hasUnsavedChanges: true,
+                };
+            });
+        },
 
         updateElement: (id, updates) =>
-            set((state) => ({
-                elements: state.elements.map((el) =>
-                    el.id === id ? { ...el, ...updates } : el
-                ),
-                hasUnsavedChanges: true,
-            })),
+            set((state) => {
+                const element = state.elements.find(el => el.id === id);
+                if (!element) return state;
+
+                // If updating position or size and element has a parent, validate bounds
+                if (element.parentId && (updates.x !== undefined || updates.y !== undefined || 
+                    updates.width !== undefined || updates.height !== undefined)) {
+                    const parent = state.elements.find(el => el.id === element.parentId);
+                    if (!parent) return state;
+
+                    const newX = updates.x !== undefined ? updates.x - parent.x : element.x;
+                    const newY = updates.y !== undefined ? updates.y - parent.y : element.y;
+                    const newWidth = updates.width || element.width;
+                    const newHeight = updates.height || element.height;
+
+                    // Ensure element stays within parent bounds
+                    updates.x = Math.max(parent.x, Math.min(parent.x + parent.width - newWidth, parent.x + newX));
+                    updates.y = Math.max(parent.y, Math.min(parent.y + parent.height - newHeight, parent.y + newY));
+                    
+                    // Ensure size doesn't exceed parent bounds
+                    if (updates.width !== undefined) {
+                        updates.width = Math.min(updates.width, parent.width);
+                    }
+                    if (updates.height !== undefined) {
+                        updates.height = Math.min(updates.height, parent.height);
+                    }
+                }
+
+                return {
+                    elements: state.elements.map((el) =>
+                        el.id === id ? { ...el, ...updates } : el
+                    ),
+                    hasUnsavedChanges: true,
+                };
+            }),
 
         deleteElement: (id) =>
-            set((state) => ({
-                elements: state.elements.filter((el) => el.id !== id),
-                selectedElementId: null,
-                hasUnsavedChanges: true,
-            })),
+            set((state) => {
+                const elementToDelete = state.elements.find(el => el.id === id);
+                if (!elementToDelete) return state;
 
-        setSelectedElement: (id) => set({ selectedElementId: id }),
+                // Get all descendant IDs (children, grandchildren, etc.)
+                const getAllDescendantIds = (elementId: string): string[] => {
+                    const element = state.elements.find(el => el.id === elementId);
+                    if (!element || !element.childIds.length) return [];
+                    
+                    const childIds = element.childIds;
+                    const descendantIds = childIds.flatMap(childId => getAllDescendantIds(childId));
+                    return [...childIds, ...descendantIds];
+                };
+
+                const descendantIds = getAllDescendantIds(id);
+                const idsToRemove = [id, ...descendantIds];
+
+                // Update parent's childIds if the element has a parent
+                let updatedElements = state.elements.map(el => {
+                    if (el.id === elementToDelete.parentId) {
+                        return {
+                            ...el,
+                            childIds: el.childIds.filter(childId => childId !== id)
+                        };
+                    }
+                    return el;
+                });
+
+                // Remove the element and all its descendants
+                updatedElements = updatedElements.filter(el => !idsToRemove.includes(el.id));
+
+                // Update selected elements
+                const updatedSelectedIds = state.selectedElementIds.filter(
+                    elementId => !idsToRemove.includes(elementId)
+                );
+
+                return {
+                    elements: updatedElements,
+                    selectedElementIds: updatedSelectedIds,
+                    hasUnsavedChanges: true,
+                };
+            }),
+
+        setSelectedElements: (ids) => set({ selectedElementIds: ids }),
+        
+        toggleElementSelection: (id) => set((state) => ({
+            selectedElementIds: state.selectedElementIds.includes(id)
+                ? state.selectedElementIds.filter(elementId => elementId !== id)
+                : [...state.selectedElementIds, id]
+        })),
+
+        clearSelection: () => set({ selectedElementIds: [] }),
 
         clearCanvas: () =>
             set((state) => ({
                 elements: [],
-                selectedElementId: null,
+                selectedElementIds: [],
                 hasUnsavedChanges: true,
             })),
 
@@ -507,6 +632,90 @@ export const useUIStore = create<UIState>((set, get) => {
             });
 
             saveState();
+        },
+
+        toggleSnapToGrid: () => set(state => ({ snapToGrid: !state.snapToGrid })),
+        setGridSize: (size) => set({ gridSize: size }),
+
+        alignElements: (alignment) => {
+            const state = get();
+            const selectedElements = state.elements.filter(el => state.selectedElementIds.includes(el.id));
+            
+            if (selectedElements.length < 2) {
+                toast.error("Select at least 2 elements to align");
+                return;
+            }
+
+            const updates: { id: string; updates: Partial<UIElement> }[] = [];
+
+            switch (alignment) {
+                case "left": {
+                    const leftmost = Math.min(...selectedElements.map(el => el.x));
+                    selectedElements.forEach(el => {
+                        if (el.x !== leftmost) {
+                            updates.push({ id: el.id, updates: { x: leftmost } });
+                        }
+                    });
+                    break;
+                }
+                case "center": {
+                    const avgX = selectedElements.reduce((sum, el) => sum + el.x + el.width / 2, 0) / selectedElements.length;
+                    selectedElements.forEach(el => {
+                        updates.push({ id: el.id, updates: { x: avgX - el.width / 2 } });
+                    });
+                    break;
+                }
+                case "right": {
+                    const rightmost = Math.max(...selectedElements.map(el => el.x + el.width));
+                    selectedElements.forEach(el => {
+                        updates.push({ id: el.id, updates: { x: rightmost - el.width } });
+                    });
+                    break;
+                }
+                case "top": {
+                    const topmost = Math.min(...selectedElements.map(el => el.y));
+                    selectedElements.forEach(el => {
+                        if (el.y !== topmost) {
+                            updates.push({ id: el.id, updates: { y: topmost } });
+                        }
+                    });
+                    break;
+                }
+                case "bottom": {
+                    const bottommost = Math.max(...selectedElements.map(el => el.y + el.height));
+                    selectedElements.forEach(el => {
+                        updates.push({ id: el.id, updates: { y: bottommost - el.height } });
+                    });
+                    break;
+                }
+                case "vertical": {
+                    const sortedByY = [...selectedElements].sort((a, b) => a.y - b.y);
+                    const totalHeight = sortedByY.reduce((sum, el) => sum + el.height, 0);
+                    const spacing = (sortedByY[sortedByY.length - 1].y + sortedByY[sortedByY.length - 1].height - sortedByY[0].y - totalHeight) / (sortedByY.length - 1);
+                    
+                    let currentY = sortedByY[0].y;
+                    sortedByY.forEach((el, index) => {
+                        if (index > 0) {
+                            updates.push({ id: el.id, updates: { y: currentY } });
+                        }
+                        currentY += el.height + spacing;
+                    });
+                    break;
+                }
+            }
+
+            updates.forEach(({ id, updates }) => {
+                set(state => ({
+                    elements: state.elements.map(el => 
+                        el.id === id ? { ...el, ...updates } : el
+                    ),
+                    hasUnsavedChanges: true
+                }));
+            });
+
+            if (updates.length > 0) {
+                toast.success(`Elements aligned ${alignment}`);
+            }
         },
     };
 });

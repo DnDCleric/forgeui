@@ -3,6 +3,7 @@ import { useUIStore } from "../store";
 import Modal from "./Modal";
 import { HiDotsVertical, HiFolder, HiDocument } from "react-icons/hi";
 import toast from "react-hot-toast";
+import { FaEdit, FaTrash } from "react-icons/fa";
 
 interface DropdownMenuProps {
     onEdit: () => void;
@@ -17,7 +18,7 @@ const DropdownMenu: React.FC<DropdownMenuProps> = ({ onEdit, onDelete, onMoveToP
             onClick={onEdit}
             className="w-full text-left px-4 py-2 hover:bg-gray-700 flex items-center gap-2"
         >
-            <span>✏️ Edit</span>
+            <span><FaEdit className="mr-2" /> Edit</span>
         </button>
         {onMoveToProject && (
             <button
@@ -31,7 +32,7 @@ const DropdownMenu: React.FC<DropdownMenuProps> = ({ onEdit, onDelete, onMoveToP
             onClick={onDelete}
             className="w-full text-left px-4 py-2 hover:bg-red-700 text-red-400 flex items-center gap-2"
         >
-            <span>🗑️ Delete</span>
+            <span><FaTrash className="mr-2" /> Delete</span>
         </button>
     </div>
 );
@@ -200,118 +201,119 @@ const ProjectExplorer: ForwardRefRenderFunction<ProjectExplorerRef, {}> = (props
     return (
         <div className="bg-gray-900 text-white p-4 border-r border-gray-700 h-full overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-bold">Projects</h2>
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-400">Projects</h2>
                 <button
                     onClick={() => setShowNewProjectModal(true)}
                     className="p-2 bg-green-600 hover:bg-green-700 rounded"
                     title="New Project"
                 >
                     <span>+</span>
-                </button>
+            </button>
             </div>
 
             {/* Projects List */}
-            <div className="space-y-4">
-                {Object.values(projects)
-                    .sort((a, b) => b.lastModified - a.lastModified)
-                    .map((project) => (
-                        <div key={project.id} className="border border-gray-700 rounded-md">
-                            {/* Project Header */}
-                            <div className="flex items-center justify-between p-2 bg-gray-800">
-                                <div className="flex items-center gap-2">
-                                    <HiFolder className="text-blue-500" />
-                                    <span>{project.name}</span>
-                                </div>
-                                <div className="relative">
-                                    <button
-                                        onClick={() => setOpenDropdownId(openDropdownId === project.id ? null : project.id)}
-                                        className="p-1 hover:bg-gray-700 rounded"
-                                    >
-                                        <HiDotsVertical />
-                                    </button>
-                                    {openDropdownId === project.id && (
-                                        <DropdownMenu
-                                            onEdit={() => {
-                                                setSelectedProjectId(project.id);
-                                                setNewProjectName(project.name);
-                                                setShowRenameProjectModal(true);
-                                                setOpenDropdownId(null);
-                                            }}
-                                            onDelete={() => {
-                                                setSelectedProjectId(project.id);
-                                                setShowDeleteProjectModal(true);
-                                                setOpenDropdownId(null);
-                                            }}
-                                        />
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Files List */}
-                            <div className="p-2 space-y-1">
-                                {project.files.map((fileId) => {
-                                    const file = files[fileId];
-                                    if (!file) return null;
-
-                                    return (
-                                        <div
-                                            key={fileId}
-                                            className={`flex items-center justify-between p-2 rounded ${
-                                                activeFileId === fileId ? "bg-blue-900" : "hover:bg-gray-800"
-                                            }`}
-                                        >
-                                            <button
-                                                className="flex items-center gap-2 flex-1 text-left"
-                                                onClick={() => handleFileClick(fileId)}
-                                            >
-                                                <HiDocument className="text-yellow-500" />
-                                                <span>{file.name}</span>
-                                            </button>
-                                            <div className="relative">
-                                                <button
-                                                    onClick={() => setOpenDropdownId(openDropdownId === fileId ? null : fileId)}
-                                                    className="p-1 hover:bg-gray-700 rounded"
-                                                >
-                                                    <HiDotsVertical />
-                                                </button>
-                                                {openDropdownId === fileId && (
-                                                    <DropdownMenu
-                                                        className="right-0"
-                                                        onEdit={() => {
-                                                            setSelectedFileId(fileId);
-                                                            setNewFileName(file.name);
-                                                            setShowRenameFileModal(true);
-                                                            setOpenDropdownId(null);
-                                                        }}
-                                                        onDelete={() => {
-                                                            setSelectedFileId(fileId);
-                                                            setShowDeleteFileModal(true);
-                                                            setOpenDropdownId(null);
-                                                        }}
-                                                        onMoveToProject={() => {
-                                                            setSelectedFileId(fileId);
-                                                            setShowMoveFileModal(true);
-                                                            setOpenDropdownId(null);
-                                                        }}
-                                                    />
-                                                )}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                                <button
-                                    onClick={() => {
-                                        setSelectedProjectId(project.id);
-                                        setShowNewFileModal(true);
-                                    }}
-                                    className="w-full p-2 text-center text-sm text-gray-400 hover:bg-gray-800 rounded"
-                                >
-                                    + Add File
-                                </button>
-                            </div>
+            {activeProjectId && projects[activeProjectId] && (
+                <div className="border border-gray-700 rounded-md">
+                    {/* Project Header */}
+                    <div className="flex items-center justify-between p-2 bg-gray-800">
+                        <div className="flex items-center gap-2">
+                            <HiFolder className="text-blue-500" />
+                            <span>{projects[activeProjectId].name}</span>
                         </div>
-                    ))}
-            </div>
+                        <div className="relative">
+                            <button
+                                onClick={() => setOpenDropdownId(openDropdownId === activeProjectId ? null : activeProjectId)}
+                                className="p-1 hover:bg-gray-700 rounded"
+                            >
+                                <HiDotsVertical />
+                            </button>
+                            {openDropdownId === activeProjectId && (
+                                <DropdownMenu
+                                    onEdit={() => {
+                                        setSelectedProjectId(activeProjectId);
+                                        setNewProjectName(projects[activeProjectId].name);
+                                        setShowRenameProjectModal(true);
+                                        setOpenDropdownId(null);
+                                    }}
+                                    onDelete={() => {
+                                        setSelectedProjectId(activeProjectId);
+                                        setShowDeleteProjectModal(true);
+                                        setOpenDropdownId(null);
+                                    }}
+                                />
+                            )}
+                    </div>
+                    </div>
+
+                    {/* Files List */}
+                    <div className="py-2">
+                        {projects[activeProjectId].files.map((fileId) => {
+                            const file = files[fileId];
+                            if (!file) return null;
+
+                            return (
+                                <div
+                                    key={fileId}
+                                    className={`flex items-center justify-between p-2 rounded ${
+                                        activeFileId === fileId ? "bg-blue-900" : "hover:bg-gray-800"
+                                    }`}
+                                >
+                                    <button
+                                        className="flex items-center gap-2 flex-1 text-left"
+                                        onClick={() => handleFileClick(fileId)}
+                                    >
+                                        <HiDocument className="text-yellow-500" />
+                                        <span>{file.name}</span>
+                                    </button>
+                                    <div className="relative">
+                                    <button
+                                            onClick={() => setOpenDropdownId(openDropdownId === fileId ? null : fileId)}
+                                            className="p-1 hover:bg-gray-700 rounded"
+                                    >
+                                            <HiDotsVertical />
+                                    </button>
+                                        {openDropdownId === fileId && (
+                                            <DropdownMenu
+                                                className="right-0"
+                                                onEdit={() => {
+                                                    setSelectedFileId(fileId);
+                                                    setNewFileName(file.name);
+                                                    setShowRenameFileModal(true);
+                                                    setOpenDropdownId(null);
+                                                }}
+                                                onDelete={() => {
+                                                    setSelectedFileId(fileId);
+                                                    setShowDeleteFileModal(true);
+                                                    setOpenDropdownId(null);
+                                                }}
+                                                onMoveToProject={() => {
+                                                    setSelectedFileId(fileId);
+                                                    setShowMoveFileModal(true);
+                                                    setOpenDropdownId(null);
+                                                }}
+                                            />
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        <button
+                            onClick={() => {
+                                setSelectedProjectId(activeProjectId);
+                                setShowNewFileModal(true);
+                            }}
+                            className="w-full p-2 text-center text-sm text-gray-400 hover:bg-gray-800 rounded"
+                        >
+                            + Add File
+                        </button>
+                    </div>
+                </div>
+            )}
+            {!activeProjectId && (
+                <div className="text-center text-gray-500 py-4">
+                    No project loaded. Create a new project or load an existing one from the File menu.
+                </div>
+            )}
 
             {/* New Project Modal */}
             {showNewProjectModal && (
@@ -492,7 +494,7 @@ const ProjectExplorer: ForwardRefRenderFunction<ProjectExplorerRef, {}> = (props
                     onConfirm={() => setShowLoadProjectModal(false)}
                     confirmText="Close"
                 >
-                    <div className="flex flex-col gap-2">
+                    <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto pr-2">
                         {Object.values(projects).length === 0 ? (
                             <div className="text-gray-500 text-center py-4">
                                 No projects available
